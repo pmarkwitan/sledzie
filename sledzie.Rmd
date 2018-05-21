@@ -1,0 +1,35 @@
+---
+title: "Śledzie"
+author: "Piotr Markwitan"
+date: "24 marca 2018"
+output: html_document
+toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Śledzie
+Ładowanie danych
+```{r ladowanie_danych}
+#REM df <- read.csv("http://www.cs.put.poznan.pl/dbrzezinski/teaching/sphd/sledzie.csv", na = c("?", "NA"))
+df <- read.csv("d:\\Piotr_priv\\studia\\praca\\sledzie\\sledzie.csv", na = c("?", "NA"))
+```
+
+## próbka oryginalnych danych
+```{r probka, echo=FALSE}
+head(df)
+```
+
+## podsumowanie oryginalnych danych
+
+```{r summary}
+summary(df)
+```
+
+## histogram
+
+```{r histogram}
+hist(df$cfin2)
+```
