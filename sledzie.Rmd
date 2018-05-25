@@ -1,35 +1,156 @@
 ---
 title: "Śledzie"
 author: "Piotr Markwitan"
-date: "24 marca 2018"
-output: html_document
-toc: yes
+date: '`r format(Sys.Date(), "%d %b %Y")`'
+output: 
+  html_document: 
+    keep_md: yes
+    toc: yes
+    toc_depth: 3
+    number_sections: no
+    
 ---
+W raporcie wykorzystano następujące biblioteki języka R:
+```{r loading_lib, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+library(ggplot2)
+library(plotly)
+library(dplyr)
+#REM library(stringr)
+library(caret)
+```
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+#REM library(mlbench) nie ma tej biblioteki
+
+```
+#Podsumowanie
+Celem ćwiczenia jest analiza wskazanego pliku pod kątem wpływu czynników zewnętrznych na rozmiar śledzia atlantyckiego. Na wstępie zbadano zmiany wielkości łowionych śledzi w kolejnych pomiarach. Widać, że do ok. 40% pomiarów średnia długość śledzia rośnie. Potem spada i jest to trwały trend. Analiza parametrów wykazała, że największy wpływ na rozmiar śledzi ma temperatura wody przy powierzchni. Wzrost temperatury powoduje zmniejszenie średniej długości śledzia atlantyckiego.
+
+#Analiza danych źródłowych
+##Dane źródłowe
+Dane źródłowe są dostępne w pliku http://www.cs.put.poznan.pl/dbrzezinski/teaching/sphd/sledzie.csv
+Zgodnie z opisem zawiera on pomiary złowionych śledzi oraz opis warunków.
+Kolejne kolumny w zbiorze danych to:
+
+- length: długość złowionego śledzia [cm];
+- cfin1: dostępność planktonu [zagęszczenie Calanus finmarchicus gat. 1];
+- cfin2: dostępność planktonu [zagęszczenie Calanus finmarchicus gat. 2];
+- chel1: dostępność planktonu [zagęszczenie Calanus helgolandicus gat. 1];
+- chel2: dostępność planktonu [zagęszczenie Calanus helgolandicus gat. 2];
+- lcop1: dostępność planktonu [zagęszczenie widłonogów gat. 1];
+- lcop2: dostępność planktonu [zagęszczenie widłonogów gat. 2];
+- fbar: natężenie połowów w regionie [ułamek pozostawionego narybku];
+- recr: roczny narybek [liczba śledzi];
+- cumf: łączne roczne natężenie połowów w regionie [ułamek pozostawionego narybku];
+- totaln: łączna liczba ryb złowionych w ramach połowu [liczba śledzi];
+- sst: temperatura przy powierzchni wody [°C];
+- sal: poziom zasolenia wody [Knudsen ppt];
+- xmonth: miesiąc połowu [numer miesiąca];
+- nao: oscylacja północnoatlantycka [mb].
+```{r ladowanie_danych, cache=TRUE}
+df <- read.csv("http://www.cs.put.poznan.pl/dbrzezinski/teaching/sphd/sledzie.csv", na = c("?", "NA"))
+```
+Wczytany zbiór ma `r nrow(df)` wierszy.
+
+Wyniki pomiarów są zapisane chronologicznie można zatem sprawdzić czy da się zauważyć zmianę długości łowionych śledzi i ewentualny trend.
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+p <- ggplot(df, aes(x = X, y = length)) + geom_smooth(se = FALSE) + geom_point() + theme_bw() + ggtitle("Długość śledzi w kolejnych pomiarach") + theme(plot.title = element_text(hjust = 0.5))
+ggplotly(p)
 ```
 
-## Śledzie
-Ładowanie danych
-```{r ladowanie_danych}
-#REM df <- read.csv("http://www.cs.put.poznan.pl/dbrzezinski/teaching/sphd/sledzie.csv", na = c("?", "NA"))
-df <- read.csv("d:\\Piotr_priv\\studia\\praca\\sledzie\\sledzie.csv", na = c("?", "NA"))
-```
+Spadek długości śledzi w ostatnich latach jest zauważalny i widać stały trend spadkowy.
 
-## próbka oryginalnych danych
+##Próbka oryginalnych danych
+Wycinek pliku źródłowego:
 ```{r probka, echo=FALSE}
 head(df)
 ```
 
-## podsumowanie oryginalnych danych
-
+##Podsumowanie oryginalnych danych
+Podstawowe parametry wczytanych wartości:
 ```{r summary}
 summary(df)
 ```
 
-## histogram
+##Korelacja wartości wejściowych
+```{r, warning=FALSE}
+df_cor <- cor(df, y=df$length, use="na.or.complete")
+colnames(df_cor) <- "wsp. korelacji"
+df_cor
+```
+Z powyższej analizy widać, że najbardziej skorelowanym z długością śledzi jest parametr _sst_ oznaczający temperaturę oceanu. Drugim parametrem jest _X_ określający numer wiersza. Z oczywistych przyczyn nie będziemy zajmować się analizą parametru porządkowego. Parametry _fbar_ i _nao_ mają prawie identyczną korelację z długością śledzi. Do dalszej analizy wybieramy _fbar_ ponieważ _nao_ jest silnie skorelowany z _sst_.
+```{r, warning=FALSE}
+ggplot(df, aes(x = sst, y = length, colour=xmonth)) + geom_smooth(method = "lm") + geom_point() + theme_bw() + ggtitle("Korelacja parametru sst") + theme(plot.title = element_text(hjust = 0.5)) + labs(colour = "Miesiąc połowu")
+ggplot(df, aes(x = fbar, y = length, colour=xmonth)) + geom_smooth(method = "lm") + geom_point() + theme_bw() + ggtitle("Korelacja parametru fbar") + theme(plot.title = element_text(hjust = 0.5)) + labs(colour = "Miesiąc połowu")
+```
 
+##Histogramy
 ```{r histogram}
-hist(df$cfin2)
+hist(df$sst)
+hist(df$fbar)
+```
+
+##Czyszczenie danych wejściowych
+Po analizie korelacji zdecydowano o wyborze następujących parametrów:
+
+- X: jako parametr porządkowy
+- fbar: natężenie połowów w regionie [ułamek pozostawionego narybku];
+- sst: temperatura przy powierzchni wody [°C];
+
+```{r}
+#_- yymonth: rok i miesiąc połowu [yyyymm];_
+#_Korzystając z faktu, że pomiary są zapisane w pliku chronologicznie utworzymy sztuczną #kolumnę aby rozbić poszczególne miesiące połowów na różne lata._
+```
+Jak widać w podsumowaniu danych tylko parametr _sst_ ma puste wartości. Ze względu na niewielką ich liczbę w porównaniu do całkowitego wolumenu (`r sum(is.na(df$sst))`/`r nrow(df)`) zdecydowano o wykluczeniu tych pomiarów z dalszej analizy. W sytuacji, gdy pustych wartości byłoby więcej należałoby zastosować inne podejście, np. wypełnienie średnią wartością, średnią kroczącą itp.
+```{r}
+df2 <- filter(select(df, c("X", "sst", "fbar", "length", "xmonth")), !is.na(sst))
+#REM df3 <- mutate(df2, yymonth = str_pad(xmonth, 2, pad = "0"))
+#REM df3 <- arrange(df3, X)
+#REM currentMonth <- df3[1, 6]
+#REM currentYear <- 1950
+
+#REM for (currentRow in 1:nrow(df3)) {
+#REM   if (df3[currentRow, 6] < currentMonth) {
+#REM     currentMonth <- df3[currentRow, 6]
+#REM     currentYear <- currentYear + 1
+#REM   }
+#REM   df3[currentRow, 6] <- paste(currentYear, df3[currentRow, 6])
+#REM }
+```
+
+#Regresja
+Utworzenie regresora z  wykorzystaniem metody kNN.
+```{r regresja, echo=TRUE}
+set.seed(23)
+inTraining <- 
+    createDataPartition(
+        y = df2$length,
+        p = .75,
+        list = FALSE)
+
+training <- df2[ inTraining,]
+testing  <- df2[-inTraining,]
+
+ctrl <- trainControl(
+    # powtórzona ocena krzyżowa
+    method = "repeatedcv",
+    # liczba podziałów
+    number = 2,
+    # liczba powtórzeń
+    repeats = 5)
+
+fit <- train(length ~ .,
+             data = training,
+             method = "knn",
+             trControl = ctrl,
+             preProcess = c("center","scale"),
+             tuneLength = 5)
+```
+Parametry regresora:
+```{r}
+fit
+plot(fit)
+
+#REM rfClasses <- predict(fit, newdata = testing)
 ```
